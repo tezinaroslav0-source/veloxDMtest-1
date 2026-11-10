@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer">
+<title>Velox DM — админ-панель</title>
+<style>
+:root{--bg:#17110d;--card:#251d17;--b:#3b2f26;--o:#ff7a00;--t:#e8e8ec;--m:#a69d95}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px/1.5 'Segoe UI',Arial,sans-serif}
+.hide{display:none!important}
+#login{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--b);border-radius:18px;padding:30px}
+h1{margin:0 0 6px;font-size:22px}h1 span{color:var(--o)}h2{font-size:18px;margin:0 0 12px}h3{margin:0;font-size:15px}
+.m{color:var(--m);font-size:13px}label{display:block;margin:12px 0 4px;color:var(--m);font-size:13px}
+input,textarea,select{width:100%;background:#17110d;color:var(--t);border:1px solid var(--b);border-radius:9px;padding:9px 11px;font:inherit}
+input:focus,textarea:focus{outline:none;border-color:var(--o)}textarea{resize:vertical;min-height:64px}
+button{background:var(--o);color:#1a0d02;border:0;border-radius:9px;padding:9px 14px;font-weight:700;cursor:pointer;font:inherit;font-weight:700}
+button:hover{filter:brightness(1.12)}button.g{background:#3b2f26;color:var(--t)}button.d{background:#5a2020;color:#ffd0d0}button.s{padding:5px 9px;font-size:13px}
+#err{color:#ff8a8a;margin-top:10px;min-height:20px;font-size:14px}
+header{position:sticky;top:0;z-index:10;background:rgba(23,17,13,.96);border-bottom:1px solid var(--b);padding:12px 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+header .sp{flex:1}main{max-width:1000px;margin:0 auto;padding:20px}
+.tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}.tabs button{background:#2b2119;color:var(--t)}.tabs button.on{background:var(--o);color:#1a0d02}
+.card{background:var(--card);border:1px solid var(--b);border-radius:14px;padding:16px;margin-bottom:14px}
+.row{display:grid;gap:10px;grid-template-columns:1fr 1fr}.row3{display:grid;gap:10px;grid-template-columns:80px 1fr 190px 190px;align-items:start}
+.bar{display:flex;gap:6px;align-items:center;margin-bottom:10px}.bar .sp{flex:1}
+details.blk{background:#1d1611;border:1px solid var(--b);border-radius:12px;margin-bottom:12px}details.blk>summary{padding:12px 14px;cursor:pointer;font-weight:700}
+.blkb{padding:0 14px 14px}.item{border-top:1px solid #33281f;padding:10px 0}
+#st{font-size:13px;color:#9fe3a6}#st.bad{color:#ff8a8a}pre{background:#17110d;border:1px solid var(--b);border-radius:9px;padding:10px;overflow:auto;font-size:12px}
+.tabsel{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tabsel button{background:#2b2119;color:var(--t)}.tabsel button.on{background:#ff9d2e;color:#1a0d02}
+@media(max-width:700px){.row,.row3{grid-template-columns:1fr}}
+</style></head><body>
+<div id="login"><h1>Velox <span>DM</span> · админ</h1><div class="m">Доступ только для администрации</div>
+<label>Логин</label><input id="lu" autocomplete="username"><label>Пароль</label><input id="lp" type="password" autocomplete="current-password">
+<div style="margin-top:16px"><button id="lb" style="width:100%">Войти</button></div><div id="err"></div></div>
+
+<div id="app" class="hide">
+<header><b>Velox <span style="color:var(--o)">DM</span></b><span class="m" id="who"></span><span class="sp"></span><span id="st"></span>
+<button class="g s" id="bUp">Загрузить JSON</button><button class="g s" id="bDl">Скачать content.json</button><button class="s" id="bGh">Опубликовать на GitHub</button><button class="g s" id="bOut">Выйти</button>
+<input type="file" id="fi" accept=".json,application/json" class="hide"></header>
+<main><div class="tabs" id="tabs"><button data-v="news" class="on">Новости</button><button data-v="rules">Правила</button><button data-v="pub">Публикация</button><button data-v="acc">Доступ</button></div><div id="view"></div></main></div>
+
+<script>
+var ADMINS={"dosty113": {"s": "c6a6a6709ebcdb8d", "h": "c9ce125ca870adf63747680056b8daad2b1b27b1a42c143cfa5b2f0bbd2d9c08"}, "93wyu": {"s": "83b349638dfaa710", "h": "c635121834228e52ec31d2867ce235bf52bde9b101fe3af41e3873c7c642e4c5"}},ITER=150000,C=null,V='news',RT=0,SID=sessionStorage;
+var $=function(i){return document.getElementById(i)};
+function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function hex(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}
+async function hash(pw,salt){var k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:ITER,hash:'SHA-256'},k,256))}
+var fails=0;
+$('lb').onclick=async function(){var u=$('lu').value.trim().toLowerCase(),p=$('lp').value,e=$('err');e.textContent='';
+ if(!window.crypto||!crypto.subtle){e.textContent='Нужен https-адрес (или открыть файл локально).';return}
+ var a=ADMINS[u],h=await hash(p,a?a.s:'x'+u),ok=a&&h===a.h;
+ if(!ok){fails++;e.textContent='Неверный логин или пароль';$('lb').disabled=true;setTimeout(function(){$('lb').disabled=false},Math.min(1000*fails*fails,30000));return}
+ SID.setItem('vu',u);start()};
+$('lp').onkeydown=function(e){if(e.key==='Enter')$('lb').click()};
+$('bOut').onclick=function(){SID.removeItem('vu');location.reload()};
+function st(t,bad){$('st').textContent=t;$('st').className=bad?'bad':'';clearTimeout(RT);RT=setTimeout(function(){$('st').textContent=''},5000)}
+async function start(){$('login').classList.add('hide');$('app').classList.remove('hide');$('who').textContent='Вы вошли как '+SID.getItem('vu');
+ try{var r=await fetch('content.json?v='+Date.now());if(!r.ok)throw 0;C=await r.json()}catch(e){C={news:[],rulesIntro:'',tabs:[]};st('content.json не найден рядом. Нажмите «Загрузить JSON».',true)}
+ try{var d=localStorage.getItem('velox_draft');if(d&&confirm('Найден несохранённый черновик. Восстановить?'))C=JSON.parse(d)}catch(e){}
+ C.news=C.news||[];C.tabs=C.tabs||[];render()}
+function save(){try{localStorage.setItem('velox_draft',JSON.stringify(C))}catch(e){}}
+function G(p){return p.reduce(function(o,k){return o[k]},C)}
+function S(p,v){var o=G(p.slice(0,-1));o[p[p.length-1]]=v;save()}
+document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.p){S(JSON.parse(t.dataset.p),t.type==='checkbox'?t.checked:t.value)}});
+function P(a){return esc(JSON.stringify(a))}
+function F(label,p,val,ta){return '<label>'+label+'</label>'+(ta?'<textarea data-p="'+P(p)+'">'+esc(val)+'</textarea>':'<input data-p="'+P(p)+'" value="'+esc(val)+'">')}
+function B(act,p,txt,cls){return '<button class="s '+(cls||'g')+'" data-act="'+act+'" data-p="'+P(p)+'">'+txt+'</button>'}
+$('tabs').onclick=function(e){var v=e.target.dataset.v;if(!v)return;V=v;[].forEach.call($('tabs').children,function(b){b.classList.toggle('on',b.dataset.v===v)});render()};
+var TS=0;
+function render(){var y=scrollY,h='';
+ if(V==='news'){h='<h2>Новости</h2>'+C.news.map(function(n,i){return '<div class="card"><div class="bar"><b>Новость '+(i+1)+'</b><span class="sp"></span>'+B('up',['news',i],'↑')+B('dn',['news',i],'↓')+B('del',['news',i],'Удалить','d')+'</div><div class="row">'+F('Метка (Обновление, Ивенты…)',['news',i,'badge'],n.badge)+F('Дата',['news',i,'date'],n.date)+'</div>'+F('Заголовок',['news',i,'title'],n.title)+F('Текст',['news',i,'text'],n.text,1)+'</div>'}).join('')+'<button data-act="addnews">+ Добавить новость</button>'}
+ else if(V==='rules'){if(TS>=C.tabs.length)TS=0;h='<h2>Правила</h2><div class="card">'+F('Вступление над правилами (можно <b>жирный</b>)',['rulesIntro'],C.rulesIntro,1)+'</div><div class="tabsel">'+C.tabs.map(function(t,i){return '<button class="'+(i===TS?'on':'')+'" data-act="seltab" data-p="'+i+'">'+esc(t.title)+'</button>'}).join('')+'<button data-act="addtab" class="s">+ Раздел</button></div>';
+  var t=C.tabs[TS];if(t){h+='<div class="card"><div class="bar"><b>Раздел</b><span class="sp"></span>'+B('up',['tabs',TS],'←')+B('dn',['tabs',TS],'→')+B('deltab',['tabs',TS],'Удалить раздел','d')+'</div><div class="row">'+F('Название',['tabs',TS,'title'],t.title)+F('Иконка (Font Awesome)',['tabs',TS,'icon'],t.icon)+'</div></div>'+(t.blocks||[]).map(function(b,bi){var bp=['tabs',TS,'blocks',bi];return '<details class="blk"><summary>'+esc(b.title||'Блок')+' <span class="m">· пунктов: '+(b.items||[]).length+'</span></summary><div class="blkb"><div class="bar">'+B('up',bp,'↑')+B('dn',bp,'↓')+'<span class="sp"></span>'+B('delblk',bp,'Удалить блок','d')+'</div><div class="row">'+F('Заголовок блока',bp.concat('title'),b.title)+F('Иконка',bp.concat('icon'),b.icon)+'</div><label><input type="checkbox" style="width:auto" data-p="'+P(bp.concat('open'))+'" '+(b.open?'checked':'')+'> Раскрыт по умолчанию</label>'+(b.items||[]).map(function(it,ii){var ip=bp.concat('items',ii);return '<div class="item"><div class="row3"><div><label>№</label><input data-p="'+P(ip.concat('num'))+'" value="'+esc(it.num)+'"></div><div><label>Текст правила</label><textarea data-p="'+P(ip.concat('html'))+'">'+esc(it.html)+'</textarea></div><div><label>Наказание</label><input data-p="'+P(ip.concat('punish'))+'" value="'+esc(it.punish)+'"></div><div><label>Примечание</label><textarea data-p="'+P(ip.concat('note'))+'">'+esc(it.note)+'</textarea></div></div><div class="bar" style="margin:6px 0 0">'+B('up',ip,'↑')+B('dn',ip,'↓')+B('del',ip,'Удалить','d')+'</div></div>'}).join('')+'<div style="margin-top:10px">'+B('additem',bp,'+ Пункт','')+'</div></div></details>'}).join('')+'<button data-act="addblk">+ Добавить блок</button>'}}
+ else if(V==='pub'){h='<h2>Публикация</h2><div class="card"><b>Вариант 1. Любой хостинг</b><p class="m">Нажмите «Скачать content.json» вверху и загрузите этот файл на хостинг рядом с index.html с заменой старого. Сайт сам подхватит изменения.</p></div><div class="card"><b>Вариант 2. Сразу на GitHub Pages</b><p class="m">Если сайт лежит в репозитории GitHub, панель может сама записать content.json. Каждому админу нужен свой токен (fine-grained, доступ только к этому репозиторию, право Contents: Read and write).</p>'+GH()+'</div>'}
+ else{h='<h2>Доступ</h2><div class="card"><p class="m">Чтобы сменить пароль или завести другого человека, введите логин и новый пароль. Панель выдаст строку, которую нужно вставить в ADMINS в начале скрипта admin.html. Пароль в файл не попадает, только его хеш.</p><div class="row"><div><label>Логин</label><input id="nu"></div><div><label>Новый пароль</label><input id="np" type="text"></div></div><p><button data-act="mkhash">Получить строку</button></p><pre id="hout" class="hide"></pre></div>'}
+ $('view').innerHTML=h;scrollTo(0,y)}
+function GH(){var g=JSON.parse(SID.getItem('vgh')||localStorage.getItem('vghp')||'{}');return '<div class="row"><div><label>Владелец (логин GitHub)</label><input id="gho" value="'+esc(g.o||'')+'"></div><div><label>Репозиторий</label><input id="ghr" value="'+esc(g.r||'')+'"></div></div><div class="row"><div><label>Ветка</label><input id="ghb" value="'+esc(g.b||'main')+'"></div><div><label>Путь к файлу</label><input id="ghp" value="'+esc(g.p||'content.json')+'"></div></div><label>Токен</label><input id="ght" type="password" value="'+esc(g.t||'')+'"><p class="m">Токен хранится только в этой вкладке до закрытия.</p><button data-act="ghpub">Опубликовать сейчас</button>'}
+document.addEventListener('click',function(e){var t=e.target,a=t.dataset&&t.dataset.act;if(!a)return;var p=t.dataset.p&&t.dataset.p[0]==='['?JSON.parse(t.dataset.p):null;
+ function mv(d){var arr=G(p.slice(0,-1)),i=p[p.length-1],j=i+d;if(j<0||j>=arr.length)return;var x=arr[i];arr[i]=arr[j];arr[j]=x;if(p[0]==='tabs'&&p.length===2)TS=j}
+ function rm(){if(!confirm('Удалить?'))return;G(p.slice(0,-1)).splice(p[p.length-1],1)}
+ if(a==='up')mv(-1);else if(a==='dn')mv(1);else if(a==='del'||a==='delblk')rm();else if(a==='deltab'){rm();TS=0}
+ else if(a==='addnews')C.news.push({badge:'Новость',date:new Date().toLocaleDateString('ru-RU'),title:'Заголовок',text:'Текст новости'});
+ else if(a==='seltab')TS=+t.dataset.p;
+ else if(a==='addtab'){C.tabs.push({id:'t'+Date.now().toString(36),icon:'fa-solid fa-scroll',title:'Новый раздел',blocks:[]});TS=C.tabs.length-1}
+ else if(a==='addblk')C.tabs[TS].blocks.push({icon:'fa-solid fa-file-contract',title:'Новый блок',open:true,items:[]});
+ else if(a==='additem'){var b=G(p);b.items=b.items||[];b.items.push({num:'',html:'',punish:'',note:''})}
+ else if(a==='mkhash'){mk();return}else if(a==='ghpub'){gh();return}else return;
+ save();render()});
+async function mk(){var u=$('nu').value.trim().toLowerCase(),p=$('np').value;if(!u||p.length<8){alert('Логин и пароль (от 8 символов)');return}
+ var s=Array.from(crypto.getRandomValues(new Uint8Array(8))).map(function(x){return x.toString(16).padStart(2,'0')}).join(''),h=await hash(p,s);
+ $('hout').textContent='"'+u+'":{"s":"'+s+'","h":"'+h+'"},';$('hout').classList.remove('hide')}
+function json(){return JSON.stringify(C,null,1)}
+function valid(){if(!C.news||!C.tabs){st('Пустые данные',true);return false}return true}
+$('bDl').onclick=function(){if(!valid())return;var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json()],{type:'application/json'}));a.download='content.json';a.click();st('Файл скачан. Загрузите его на хостинг.')};
+$('bUp').onclick=function(){$('fi').click()};
+$('fi').onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{C=JSON.parse(r.result);C.news=C.news||[];C.tabs=C.tabs||[];save();render();st('JSON загружен')}catch(e){st('Не удалось прочитать файл',true)}};r.readAsText(f)};
+$('bGh').onclick=function(){V='pub';[].forEach.call($('tabs').children,function(b){b.classList.toggle('on',b.dataset.v==='pub')});render()};
+async function gh(){if(!valid())return;var o=$('gho').value.trim(),r=$('ghr').value.trim(),b=$('ghb').value.trim()||'main',p=$('ghp').value.trim()||'content.json',t=$('ght').value.trim();
+ if(!o||!r||!t){st('Заполните владельца, репозиторий и токен',true);return}SID.setItem('vgh',JSON.stringify({o:o,r:r,b:b,p:p,t:t}));
+ var u='https://api.github.com/repos/'+encodeURIComponent(o)+'/'+encodeURIComponent(r)+'/contents/'+p.split('/').map(encodeURIComponent).join('/'),H={Authorization:'Bearer '+t,Accept:'application/vnd.github+json'};
+ try{var sha;var g=await fetch(u+'?ref='+encodeURIComponent(b),{headers:H});if(g.ok)sha=(await g.json()).sha;else if(g.status!==404)throw new Error('GitHub: '+g.status+' (проверьте токен и права)');
+  var bytes=new TextEncoder().encode(json()),bin='';bytes.forEach(function(x){bin+=String.fromCharCode(x)});
+  var body={message:'Обновление контента ('+SID.getItem('vu')+')',content:btoa(bin),branch:b};if(sha)body.sha=sha;
+  var pr=await fetch(u,{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},H),body:JSON.stringify(body)});
+  if(!pr.ok)throw new Error('GitHub: '+pr.status+' '+((await pr.json()).message||''));
+  try{localStorage.removeItem('velox_draft')}catch(e){}st('Опубликовано. Сайт обновится через 1–2 минуты.')}catch(e){st(e.message,true)}}
+if(SID.getItem('vu')&&ADMINS[SID.getItem('vu')])start();
+</script></body></html>
